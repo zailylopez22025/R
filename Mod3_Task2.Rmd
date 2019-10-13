@@ -1,0 +1,965 @@
+---
+title: "Mod3_Task1"
+author: "Zaily Lopez"
+date: "9/11/2019"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+
+```{r}
+
+##http://rpubs.com/blancabaron/395376
+
+
+#1 . Begin by installing the RMySQL package. Documentation can be found here 
+#install.packages("RMySQL")
+#install.packages("lubridate")
+#install.packages("VIM")
+#install.packages("tidyverse")
+#install.packages("rio")
+#install.packages("cellranger")
+#install.packages("viridis")  # Install
+#install.packages("ggfortify")
+#install.packages("ggplot2")
+#install.packages("forecast")
+library(RMySQL)
+library(dplyr)
+library(lubridate)
+
+
+library(rio) #requirements for VIM
+library(cellranger) #requirements for VIM
+library(VIM)        #Visualizing and imputing missing values
+
+library(tidyverse)  #Package for tidying data
+
+library("viridisLite") #requirement for viridis
+library("viridis")           # Load
+
+library(ggplot2)
+library(ggfortify)
+library(forecast) 
+
+```
+
+
+```{r}
+#2. Now that you have RMySQL we can connect to the database and see what it contains.
+## Create a database connection 
+con = dbConnect(MySQL(), user='deepAnalytics', password='Sqltask1234!', dbname='dataanalytics2018', host='data-analytics-2018.cbrosir2cswx.us-east-1.rds.amazonaws.com')
+
+## List the tables contained in the database 
+dbListTables(con)
+
+```
+
+
+
+```{r}
+#3. Let’s use the “iris” table as an example. To learn the attributes in that table, use the dbListFields command. If you have waited too long since connecting to the database you may have to connect again.
+
+## Lists attributes contained in a table - Testing
+dbListFields(con,'iris')
+
+
+
+```
+
+```{r}
+#4. Still focusing on “iris”, we can query the database. We can download all of the data or choose the specific attributes we’re interested in. 
+
+
+## Use asterisk to specify all attributes for download
+irisALL <- dbGetQuery(con, "SELECT * FROM iris")
+irisALL
+
+## Use attribute names to specify specific attributes for download
+irisSELECT <- dbGetQuery(con, "SELECT SepalLengthCm, SepalWidthCm FROM iris")
+irisSELECT
+
+
+```
+
+
+```{r}
+
+#5. Using the dbListFields function learn the attributes associated with the yr_2006-yr_2010
+dbListFields(con,'yr_2006 ')
+
+
+```
+
+
+```{r}
+
+#6. Use the dbGetQuery function to download tables 2006 through 2010 with the specified attributes. 
+
+# 
+# mutate(yr_2006 = dmy_hms(Date))
+# 
+# mutate(start_time = ymd_hms(start_time), end_time = ymd_hms(end_time))
+# 
+#        
+# mutate(Date = DATEDIFF(sql("DAY"), 'INVOICE DATE', GETDATE()))
+
+yr_2006 <- dbGetQuery(con, "SELECT * FROM yr_2006") 
+yr_2007 <- dbGetQuery(con, "SELECT * FROM yr_2007") 
+yr_2008 <- dbGetQuery(con, "SELECT * FROM yr_2008") 
+yr_2009 <- dbGetQuery(con, "SELECT * FROM yr_2009") 
+yr_2010 <- dbGetQuery(con, "SELECT * FROM yr_2010") 
+
+
+```
+
+
+
+```{r}
+
+##troubleshoot
+result <- dbGetQuery(con,"show databases");
+result 
+
+allTables <- dbListTables(con)
+allTables
+
+dbGetQuery(con, "SHOW CREATE TABLE yr_2008")
+
+yr_2009
+
+yr_2008_date <- dbGetQuery(con, "SELECT Date, Time, Global_active_power FROM yr_2008") 
+yr_2008_date
+
+
+query2 <-  dbGetQuery(con, "SELECT CAST(Date AS DATE) as Date, Global_active_power FROM yr_2009 where Date = '20-02-2019' ") 
+query2
+
+
+
+
+#TESTING UPDATE Y DELETE 
+#Q1 <- "delete from yr_2008 where id = 1"
+#dbGetQuery(con, Q1)
+
+#Q2 <- "UPDATE yr_2008 SET Global_active_power = 2 WHERE ID = 1"
+#dbGetQuery(con, Q2)
+   
+
+```
+
+
+```{r}
+#7. Investigate each new data frame.Does each data frame cover an entire year? 
+# Answer: No for 2006 year data starts from Dec 16 and ends with Dec 31. and for 2010 we only have data until Nov 26. 
+#So the data goes from Dec 16 - 2006 until Nov 26 2010. 
+
+
+str(yr_2006)
+summary(yr_2006)
+head(yr_2006) 
+tail(yr_2006)
+
+str(yr_2007)
+summary(yr_2007)
+head(yr_2007) 
+tail(yr_2007)
+
+str(yr_2008)
+summary(yr_2008)
+head(yr_2008) 
+tail(yr_2008)
+
+str(yr_2009)
+summary(yr_2009)
+head(yr_2009) 
+tail(yr_2009)
+
+str(yr_2010)
+summary(yr_2010)
+head(yr_2010) 
+tail(yr_2010)
+
+
+```
+
+
+
+```{r}
+
+#8. Create your Primary Data Frame
+## Combine tables into one dataframe using dplyr - Removing data from year 2006 and 2010 due to is not a complete data set (should I remove 2010 also and why?)
+
+newDF <- bind_rows(yr_2007, yr_2008, yr_2009)
+head(newDF)
+tail (newDF)
+
+newDF
+
+```
+
+
+
+**PRE-PROCESING**
+
+```{r}
+#1. Now that you have your primary date frame you will need to apply data munging skills to create a DateTime attribute.
+
+
+## Combine Date and Time attribute values in a new attribute column
+newDF <-cbind(newDF,paste(newDF$Date,newDF$Time), stringsAsFactors=FALSE)
+head (newDF)
+
+
+## Give the new attribute in the 6th column a header name 
+## NOTE: if you downloaded more than 5 attributes you will need to change the column number)
+colnames(newDF)[11] <-"DateTime"
+head (newDF)
+
+
+## Move the DateTime attribute within the dataset
+newDF <- newDF[,c(ncol(newDF), 1:(ncol(newDF)-1))]
+head(newDF)
+
+newDF
+
+```
+
+
+```{r}
+#2. You will now want to convert the new DateTime attribute to a DateTime data type called POSIXct. After converting to POSIXct we will add the time zone to prevent warning messages. The data description suggests that the data is from France.
+
+## Convert DateTime from character to POSIXct - 
+#Due to the data and the information suggest is a data from France it will be convert the date time variable to CET (Central European Time)
+#https://greenwichmeantime.com/time-zone/europe/european-union/france/time/
+#newDF$DateTime <- as.POSIXct(newDF$DateTime, "%YYYY-%mm-%dd %HH:%MM:%SS", tz="CET")
+newDF$DateTime <- as.POSIXct(newDF$DateTime, "%YYYY-%mm-%dd %HH:%MM:%SS")
+
+head (newDF)
+tail (newDF)
+
+
+range(newDF$DateTime)
+
+
+```
+
+
+
+```{r}
+#3. ## Add the time zone
+attr(newDF$DateTime, "tzone") <- "Europe/Paris"
+
+
+
+## Inspect the data types
+str(newDF)
+
+#What is the data type for DateTime? What do the values look like? 
+#Answer: POSIXct and it looks like "2007-01-01 01:00:00"
+ 
+```
+
+
+
+```{r}
+#Lubridate 
+#1. Install Lubridate
+#2. Extract "Year" information from DateTime using the Lubridate "year" function and create an attribute for year
+
+## Create "year" attribute with lubridate
+#
+#mutate(newDF$DateTime = ymd_hm(str_c(Year, Month, Week, Weekdays, Day, Hour, Minute, sep="-")))
+
+newDF$Year <- year(newDF$DateTime)
+unique (newDF$year)
+
+newDF$Quarter <- quarter(newDF$DateTime)
+unique (newDF$quarter)
+
+newDF$Month <- month(newDF$DateTime)
+unique (newDF$month)
+
+newDF$Week <- week(newDF$DateTime)
+unique (newDF$week)
+
+newDF$Weekdays <- weekdays(newDF$DateTime)
+unique (newDF$Weekdays)
+
+newDF$Weekday <- wday(newDF$DateTime)
+unique (newDF$Weekday)
+
+
+
+
+newDF$Day <- day(newDF$DateTime)
+unique (newDF$day)
+
+newDF$Hour <- hour(newDF$DateTime)
+unique (newDF$hour)
+
+newDF$Minute <- minute(newDF$DateTime)
+unique (newDF$minute)
+
+head(newDF)
+tail(newDF)
+
+
+
+```
+
+
+*PERFORM INITIAL EXPLORATION OF THE DATA*
+
+**Gather summary statistics**
+* Using the summary() command calculate the mean, mode, standard deviation, quartiles & characterization of the distribution and maybe more.
+
+
+
+```{r}
+
+#Check that there are no missing values remaining
+sum(is.na(newDF))
+
+
+#Range of the DateTime 
+range (newDF$DateTime)
+
+##for quantiles calculation
+quantile(newDF$Global_active_power)
+quantile(newDF$Global_reactive_power)
+quantile(newDF$Global_intensity)
+quantile(newDF$Voltage)
+quantile(newDF$Sub_metering_1)
+quantile(newDF$Sub_metering_2)
+quantile(newDF$Sub_metering_3)
+
+
+#mean 
+mean(newDF$Global_active_power)
+mean(newDF$Global_reactive_power)
+mean(newDF$Global_intensity)
+mean(newDF$Voltage)
+mean(newDF$Sub_metering_1)
+mean(newDF$Sub_metering_2)
+mean(newDF$Sub_metering_3)
+
+
+#Standard Deviation
+sd(newDF$Sub_metering_1)
+sd(newDF$Sub_metering_2)
+sd(newDF$Sub_metering_3)
+
+
+
+head(newDF)           # TOP 6 RECORDS
+tail (newDF)
+summary(newDF)        # SUMMARY 
+
+#MAX Submeetering
+max(newDF$Sub_metering_1)
+max(newDF$Sub_metering_2)
+max(newDF$Sub_metering_3)
+
+#MIN Submeetering
+min(newDF$Sub_metering_1)
+min(newDF$Sub_metering_2)
+min(newDF$Sub_metering_3)
+
+
+
+```
+
+
+
+
+
+**Gather summary statistics**
+
+* Which sub-meter is using the most power? The least? Is there anything to learn from the max and min? 
+
+Answer: 
+
+Max is SubMeter3 for each of the years (2007-2010)
+
+Min is SubMeter1 for each of the years (2007-2010)
+
+
+
+
+**Data Conversion **
+
+In general terms, the active energy is the real power consumed by the household, whereas the reactive energy is the unused power in the lines.
+
+We can see that the dataset provides the active power as well as some division of the active power by main circuit in the house, specifically the kitchen, laundry, and climate control. These are not all the circuits in the household.
+
+The remaining watt-hours can be calculated from the active energy by first converting the active energy to watt-hours then subtracting the other sub-metered active energy in watt-hours, as follows:
+
+```{r}
+
+
+# Add feature representing remaining active energy consumed every minute (watt hour)
+# newDF <- newDF %>%
+#   mutate(sub_metering_remainder=(newDF$Global_active_power * 1000 / 60) - (newDF$Sub_metering_1 + newDF$Sub_metering_2 + newDF$Sub_metering_3))
+# 
+# as_tibble(newDF)
+# str(newDF)
+# head (newDF)
+
+# Create tidy tibble
+all_sub_metering <- newDF %>%
+gather(Meter, Watt_hr, Sub_metering_1, Sub_metering_2, Sub_metering_3)
+
+all_sub_metering %>% as_tibble(all_sub_metering)
+is_tibble(all_sub_metering)
+
+all_sub_metering$Meter <- factor(all_sub_metering$Meter)
+glimpse(all_sub_metering)
+
+  
+```
+
+
+
+
+**GRAPHICS**
+
+```{r}
+#Sub_metering_1  -  kitchen (containing mainly a dishwasher, an oven and a microwave (hot plates are not electric but gas powered).)
+#Sub_metering_2  -  laundry room (containing a washing-machine, a tumble-drier, a refrigerator and a light.)
+#Sub_metering_3  -  electric water-heater and an air-conditioner 
+
+
+#Global Active Power
+hist(newDF$Global_active_power, col = "skyblue", main = "Global Active Power", xlab = "Global Active Power (kilowatts)")
+
+
+#Graphic for the consuption by year
+all_sub_metering %>%
+group_by(year(DateTime), Meter) %>%
+summarise(sum=sum(Watt_hr)) %>%
+ggplot(aes(x=factor(`year(DateTime)`), sum, group=Meter,fill=Meter)) +
+labs(x='Year', y='Proportion of Energy Usage') +
+ggtitle('Energy Consumption by Year') +
+geom_bar(stat='identity', position='fill', color='black') +
+theme(panel.border=element_rect(colour='black', fill=NA)) +
+scale_color_viridis(discrete = TRUE, option = "viridis")+
+scale_fill_viridis(discrete = TRUE, option = "viridis") +
+theme_minimal() +
+theme(legend.position = "right")
+
+
+
+
+
+#Summer: 21 y el 22 de junio y termina el 21 de septiembre.
+#https://www.epochconverter.com/weeks/2019 
+
+#-Filter and plot data for weeks 25-39
+all_sub_metering %>%
+filter(week(DateTime) == c(25:39)) %>%
+mutate(Day=lubridate::wday(DateTime, label=TRUE, abbr=TRUE)) %>%
+group_by(Day, Meter) %>%
+summarise(sum=sum(Watt_hr/1000)) %>%
+ggplot(aes(x=factor(Day), y=sum)) +
+labs(x='Day of the Week', y='kWh') +
+ylim(0,85) +
+ggtitle('Total Energy Usage by Day for Weeks of \nHigh Consumption Summer Months') +
+geom_bar(stat='identity', aes(fill = Meter), colour='black') +
+scale_color_viridis(discrete = TRUE, option = "viridis")+
+scale_fill_viridis(discrete = TRUE, option = "viridis") +
+theme_minimal() +
+theme(legend.position = "right")
+
+
+
+
+
+
+#WINTER: 21 de diciembre y termina aproximadamente en el 20 y 21 de Marzo
+#-Filter and plot data for weeks 51-13
+all_sub_metering %>%
+filter(week(DateTime) == c(51-13)) %>%
+mutate(Day=lubridate::wday(DateTime, label=TRUE, abbr=TRUE)) %>%
+group_by(Day, Meter) %>%
+summarise(sum=sum(Watt_hr/1000)) %>%
+ggplot(aes(x=factor(Day), y=sum)) +
+labs(x='Day of the Week', y='kWh') +
+ylim(0,85) +
+ggtitle('Total Energy Usage by Day for Weeks of \nHigh Consumption in Winter Months') +
+geom_bar(stat='identity', aes(fill = Meter), colour='black') +
+theme(panel.border=element_rect(colour='black', fill=NA)) +
+scale_color_viridis(discrete = TRUE, option = "viridis")+
+scale_fill_viridis(discrete = TRUE, option = "viridis") +
+theme_minimal() +
+theme(legend.position = "right")
+
+
+
+#-Subset data for weeks 25-39 and assign to variable ww
+summer <- all_sub_metering %>%
+  filter(week(DateTime) == c(25:39)) %>%
+  filter(Meter == 'Sub_metering_3') %>% 
+  mutate(Day=lubridate::wday(DateTime, label=TRUE, abbr=TRUE)) %>%
+  group_by(Day, Meter) %>%
+  summarise(sum=sum(Watt_hr/1000))
+
+summer
+
+
+
+#-Subset data for weeks 51-13 and assign to variable w
+winter <- all_sub_metering %>%
+  filter(week(DateTime) == c(51-13)) %>%
+  filter(Meter == 'Sub_metering_3') %>% 
+  mutate(Day=lubridate::wday(DateTime, label=TRUE, abbr=TRUE)) %>%
+  group_by(Day, Meter) %>%
+  summarise(sum=sum(Watt_hr/1000))
+
+winter
+
+
+
+
+#-Overlay line plots of the two 8-week time periods
+ggplot(winter) +
+  labs(x='Day of the Week', y='kWh') +
+  ylim(0,65) +
+  ggtitle('Total Energy Usage on Submeter 3 for High\n Consumption Period in Winter and Summer Months') +
+  geom_line(aes(x=Day, y=sum, group=1,colour='winter')) +
+  
+  geom_line(data = summer, aes(x=Day, y=sum, group=1, color='summer')) +
+  scale_colour_manual(values=c('winter'='skyblue', 'summer'='red')) +
+  labs(colour='Season') +
+  guides(colour=guide_legend(reverse=TRUE)) +
+  theme(panel.border=element_rect(colour='black', fill=NA))+
+  theme(text = element_text(size = 14))
+
+```
+
+
+
+
+
+
+
+**Propose three high-level recommendations you can suggest based on your initial exploration of the power consumption data**
+
+Note: 
+#Sub_metering_1  -  kitchen (containing mainly a dishwasher, an oven and a microwave (hot plates are not electric but gas powered).)
+
+#Sub_metering_2  -  laundry room (containing a washing-machine, a tumble-drier, a refrigerator and a light.)
+
+#Sub_metering_3  -  electric water-heater and an air-conditioner 
+
+
+*Thought Starter: If you could add more information to the data set, what kinds of attributes would you add? What would be important to understanding the power usage in this home?*
+
+     -on the Sub_metering_1 shoud be take in consideration other electrical appliances like toaster, coffee maker, electrics sartens, etc.
+     
+     -Other electrical stuff like TV, Gaming systems, Laptop, tablets, Printers etc are not taked in consideration. 
+     
+     -Other thing that consume a lot is the iron that should be taked in consideration on the laundry room for the Sub_metering_2. 
+     
+     -Something important that electric heater and the air conditioner should be separate to analize this behavior better. 
+     
+     -From what area is this data? 
+  
+
+
+*Thought Starter: Should the appliances on the sub-meters be grouped the way they are currently grouped? Could more information be gained if some were separated?*
+
+    -The refrigirator should be counted as part of the Sub_metering_1 in the kitchen.
+
+    -kitchen itself is not been counted as part of the Sub_metering_1? 
+
+    
+
+
+
+
+
+
+*STARTING FROM HERE IS THE TASK # 2 OF THE MODULE 3* 
+
+#1. VISUALIZE THE DATA 
+
+
+```{r}
+
+#1. Granularity
+
+## Plot all of sub-meter 1
+plot(newDF$Sub_metering_1)
+
+```
+
+
+
+```{r}
+#2. Subsetting and Meaningful Time Periods
+
+# Another possible goal of subsetting is to focus on periods of time that highlight patterns of power usage. For this project, a week is a good period of time to visualize because people display different behaviors during the course of a week. Some work weekdays and have weekends off. Some have specific days when laundry is done. 
+
+## Subset the second week of 2008 - All Observations
+houseWeek <- filter(newDF, Year == 2008 & Week == 2)
+## Plot subset houseWeek
+plot(houseWeek$Sub_metering_1)
+
+
+```
+
+
+
+
+```{r}
+#3. Visualize a Single Day with Plotly
+#install.packages("plotly")
+library("plotly")
+
+# Now that we have explored some basic plotting, granularity and meaningful time periods we will move on to using a more advanced visualization package called plotly. The documentation for a basic line plot can be found here. Don't forget that you may need to install this package. 
+
+## Subset the 9th day of January 2008 - All observations
+houseDay <- filter(newDF, Year == 2008 & Month == 1 & Day == 9)
+## Plot sub-meter 1
+plot_ly(houseDay, x = ~houseDay$DateTime, y = ~houseDay$Sub_metering_1, type = 'scatter', mode = 'lines')
+
+# But, does this plot make sense? What does sub-meter 1 correspond with in this home?
+# Anwer: It correspond to the kitchen appliances at 5pm 
+# kitchen (containing mainly a dishwasher, an oven and a microwave (hot plates are not electric but gas powered).)
+
+
+
+# Perhaps the best way to understand the power usage on this day is to plot all three sub-meters to gain a perspective on all of the power being consumed. While we're at it let's add a legend, title and axis labels.
+
+
+## Plot sub-meter 1, 2 and 3 with title, legend and labels - All observations 
+plot_ly(houseDay, x = ~houseDay$DateTime, y = ~houseDay$Sub_metering_1, name = 'Kitchen', type = 'scatter', mode = 'lines') %>%
+ add_trace(y = ~houseDay$Sub_metering_2, name = 'Laundry Room', mode = 'lines') %>%
+ add_trace(y = ~houseDay$Sub_metering_3, name = 'Water Heater & AC', mode = 'lines') %>%
+ layout(title = "Power Consumption January 9th, 2008",
+ xaxis = list(title = "Time"),
+ yaxis = list (title = "Power (watt-hours)"))
+
+
+#Interesting to see the higer usage on the kitchen area around ~5PM. But also the Water Heater & AC is heavily use during the day. 
+
+```
+
+
+
+```{r}
+#4. Reducing Granularity
+
+# The plot above is pretty grainy given that 1440 points have been plotted. 
+# Let’s experiment and see if we can get a better plot by reducing the granularity from one observation per minute to one observation every 10 minutes. To do this we’ll need to use filter again and create a new sub-set.
+
+
+## Subset the January 1st 2008 - 10 Minute frequency
+houseDay10 <- filter(newDF, Year == 2008 & Month == 1 & Day == 1 & (Minute == 0 | Minute == 10 | Minute == 20 | Minute == 30 | Minute == 40 | Minute == 50))
+
+
+## Plot sub-meter 1, 2 and 3 with title, legend and labels - 10 Minute frequency
+plot_ly(houseDay10, x = ~houseDay10$DateTime, y = ~houseDay10$Sub_metering_1, name = 'Kitchen', type = 'scatter', mode = 'lines') %>%
+ add_trace(y = ~houseDay10$Sub_metering_2, name = 'Laundry Room', mode = 'lines') %>%
+ add_trace(y = ~houseDay10$Sub_metering_3, name = 'Water Heater & AC', mode = 'lines') %>%
+ layout(title = "Power Consumption January 1st, 2008",
+ xaxis = list(title = "Time"),
+ yaxis = list (title = "Power (watt-hours)"))
+
+
+# With the granularity adjusted we get a much more clear picture of the power consumption on January 1st. 
+#So what can you learn from this visualization? 
+  #The time and the submetering with higer consumption during the day. 
+
+#Your analysis could include answers to the following. 
+#What peaks might represent the water heater? How about the AC? 
+  #The problem is the water heater and the AC are been measure by one single sub-meter so is not possible to identify in a separate way the behavior of each one. 
+
+#What could be happening in the laundry room? 
+  #Majority of the Laundry happends during 12:10 and 2:10PM 
+
+#How many times during this day are kitchen appliances being used? 
+  #Around 4 times. 
+
+#Lastly, in your opinion, does the data from these three sub-meters contain useful information for the homeowner? 
+  #Maybe but I don't think is enough for a complete analysis, this is just one home, we don't have the information of how many members of this home are, ages, etc. 
+
+```
+
+
+```{r}
+#5.  Produce Two More Visualizations
+
+# Create a visualization with plotly for a Week of your choosing. Use all three sub-meters and make sure to label. Experiment with granularity. 
+
+houseWeek22 <- filter(newDF, Year == 2009 & Week == 22 & (Hour == 0 | Hour == 4 | Hour == 8 |  Hour == 12 | Hour == 16 | Hour == 20))
+
+
+## Plot sub-meter 1, 2 and 3 with title, legend and labels - 10 Minute frequency
+plot_ly(houseWeek22, x = ~houseWeek22$DateTime, y = ~houseWeek22$Sub_metering_1, name = 'Kitchen', type = 'scatter', mode = 'lines') %>%
+ add_trace(y = ~houseWeek22$Sub_metering_2, name = 'Laundry Room', mode = 'lines') %>%
+ add_trace(y = ~houseWeek22$Sub_metering_3, name = 'Water Heater & AC', mode = 'lines') %>%
+ layout(title = "Power Consumption WEEK 22 OF 2009",
+ xaxis = list(title = "Days"),
+ yaxis = list (title = "Power (watt-hours)"))
+
+
+
+
+
+# Create a visualization for a time period of your choice. Both "Day" and "Week" highlight typical patterns in a home. What might be another period of time that could provide insights? Use plotly and experiment with granularity until you find the visualization that maximizes information gain for the viewer. 
+#zaiy's note: By weekdays maybe can provide some insights ?
+
+
+## Subset the 31st day of Dec 2007 - 10 Minute frequency
+houseDay31 <- filter(newDF, Year == 2007 & Month == 12 & Day == 31 & (Minute == 0 | Minute == 10 | Minute == 20 | Minute == 30 | Minute == 40 | Minute == 50))
+
+
+## Plot sub-meter 1, 2 and 3 with title, legend and labels - 10 Minute frequency
+plot_ly(houseDay31, x = ~houseDay31$DateTime, y = ~houseDay31$Sub_metering_1, name = 'Kitchen', type = 'scatter', mode = 'lines') %>%
+ add_trace(y = ~houseDay31$Sub_metering_2, name = 'Laundry Room', mode = 'lines') %>%
+ add_trace(y = ~houseDay31$Sub_metering_3, name = 'Water Heater & AC', mode = 'lines') %>%
+ layout(title = "Power Consumption January 31st, 2007",
+ xaxis = list(title = "Time"),
+ yaxis = list (title = "Power (watt-hours)"))
+
+
+
+#Insights: Interesting Dec 31 2007 Holiday - looks like no use of the Kitchen appliances during that day. 
+
+
+#Visualization of the last week of the year 2007
+houseWeek52 <- filter(newDF, Year == 2007 & Week == 52 & (Hour == 0 | Hour == 4 | Hour == 8 |  Hour == 12 | Hour == 16 | Hour == 20))
+
+
+## Plot sub-meter 1, 2 and 3 with title, legend and labels - 10 Minute frequency
+plot_ly(houseWeek52, x = ~houseWeek52$DateTime, y = ~houseWeek52$Sub_metering_1, name = 'Kitchen', type = 'scatter', mode = 'lines') %>%
+ add_trace(y = ~houseWeek52$Sub_metering_2, name = 'Laundry Room', mode = 'lines') %>%
+ add_trace(y = ~houseWeek52$Sub_metering_3, name = 'Water Heater & AC', mode = 'lines') %>%
+ layout(title = "Power Consumption WEEK 52 OF 2007",
+ xaxis = list(title = "Days"),
+ yaxis = list (title = "Power (watt-hours)"))
+
+#Insights: 
+  #During the last week of the year 2007, the majority consuption was for the Laundry Room on Dec 24 and Dec 29 almost the double as "normal" days.
+  #Every single day all the submetering was used. 
+
+```
+
+
+```{r}
+# Optional Work
+
+    # Produce pie chart visualizations that are likely to provide insight, e.g.
+      #Answ: Pie chart visualizations are not recomended 
+    # Percentage of total use at various times of day by each sub-meter.
+
+ 
+
+# plot_ly(houseDay, labels= , name = 'Kitchen', type = 'pie') %>%
+#  add_trace(y = ~houseDay$Sub_metering_2, name = 'Laundry Room', mode = 'lines') %>%
+#  add_trace(y = ~houseDay$Sub_metering_3, name = 'Water Heater & AC', mode = 'lines') %>%
+#  layout(title = "Power Consumption January 9th, 2008",
+#  xaxis = list(title = "Time"),
+#  yaxis = list (title = "Power (watt-hours)"))wha
+# 
+# 
+# p <- plot_ly(houseDay, labels = ~Categorie, values = ~, type = 'pie') %>%
+#   layout(title = 'Power Consumption January 9th, 2008',
+#          xaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE),
+#          yaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE))
+
+
+ plot_ly(houseDay, 
+         labels= ~Sub_metering, 
+         values = ~Year,
+         type = 'pie',
+         hoverinfo='text',
+         text = ~paste ('Sub_Metering: ', Sub_Metering),
+         showlegend = FALSE %>%
+          layout(title = 'Power Consumption per sub-metering',
+         xaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE),
+         yaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE))
+
+         )
+
+
+    # Percentage of total power use over a day by each sub-meter.
+    # Percentage of total power use over an entire year by each sub-meter.
+    # Produce any other visualizations that you believe may provide insight.
+
+```
+
+
+*#STEP # 2 - PREPARE TO ANALIZY THE DATA*
+
+
+```{r}
+
+
+
+
+  #Store your data frame(s) as time series
+
+## Subset to one observation per week on Mondays at 8:00pm for 2007, 2008 and 2009
+house070809weekly <- filter(newDF, Weekday == 2 & Hour == 20 & Minute == 1)
+house070809weekly
+
+## Create TS object with SubMeter3
+tsSM3_070809weekly <- ts(house070809weekly$Sub_metering_3, frequency=52, start=c(2007,1))
+tsSM3_070809weekly
+
+
+  
+
+```
+
+
+```{r}
+  #Produce time series plots
+
+## Plot sub-meter 3 with autoplot (you may need to install these packages)
+autoplot(tsSM3_070809weekly)
+
+## Plot sub-meter 3 with autoplot - add labels, color
+autoplot(tsSM3_070809weekly, ts.colour = 'red', xlab = "Time", ylab = "Watt Hours", main = "Sub-meter 3")
+
+
+## Plot sub-meter 3 with plot.ts
+plot.ts(tsSM3_070809weekly)
+
+
+#Review your plots. Which do you prefer? Why? Make any parameter changes you need to match the aesthetic formatting of your report.
+#Answer: the last one. It provides more data we can see for example last period of 2007 something happends that we 0 values. 
+
+
+```
+
+
+*Produce Two More Visualizations*
+
+```{r}
+
+
+#Produce Two More Visualizations
+
+#Sub_metering_1  -  kitchen (containing mainly a dishwasher, an oven and a microwave (hot plates are not electric but gas powered).)
+#Sub_metering_2  -  laundry room (containing a washing-machine, a tumble-drier, a refrigerator and a light.)
+#Sub_metering_3  -  electric water-heater and an air-conditioner 
+
+# 1. The sub-meter 3 plot you built in the walkthrough above
+## Create TS object with SubMeter3
+tsSM3_08weekly <- ts(house070809weekly$Sub_metering_3, frequency=52, start=c(2008,1))
+## Plot sub-meter 3 with plot.ts
+plot.ts(tsSM3_08weekly, main = "Submetering # 3 - Electric Water & AC - Frequency year 2008")
+ 
+
+# 2. Sub-meter 1 with your choice of frequency and time 
+## Create TS object with SubMeter3
+tsSM1_08weekly <- ts(house070809weekly$Sub_metering_2, frequency=52, start=c(2008,1))
+## Plot sub-meter 3 with plot.ts
+plot.ts(tsSM1_08weekly, main = "Submetering # 2 - Laundry Room - Frequency year 2008")
+
+# 3. Sub-meter 2 with your choice of frequency and time period
+
+tsSM2_08weekly <- ts(house070809weekly$Sub_metering_1, frequency=52, start=c(2008,1))
+## Plot sub-meter 3 with plot.ts
+plot.ts(tsSM2_08weekly, main = "Submetering # 1 - Kitchen - Frequency year 2008")
+
+
+```
+
+
+
+```{r}
+#FORECASTING A TIME SERIE
+
+## Apply time series linear regression to the sub-meter 3 ts object and use summary to obtain R2 and RMSE from the model you built
+
+fitSM3 <- tslm(tsSM3_08weekly ~ trend + season) 
+summary(fitSM3)
+
+
+## Create the forecast for sub-meter 3. Forecast ahead 20 time periods 
+forecastfitSM3 <- forecast(fitSM3, h=20)
+## Plot the forecast for sub-meter 3. 
+plot(forecastfitSM3)
+
+#What do the different gray areas represent? Should the forecast really have negative values, or is that an artifact from linear regression? 
+# Answer: The gray areas represent the level of confidence the 80% the ligher grey and the 90% the darkest for the Sub-metering # 3. 
+
+
+
+```
+
+```{r}
+#Lets do one more plot. This time we will add labels, change the confidence levels and plot only the forecast portion that is above zero. 
+## Create sub-meter 3 forecast with confidence levels 80 and 90
+forecastfitSM3c <- forecast(fitSM3, h=20, level=c(80,90))
+
+## Plot sub-meter 3 forecast, limit y and add labels
+plot(forecastfitSM3c, ylim = c(0, 20), ylab= "Watt-Hours", xlab="Time")
+
+```
+
+
+
+```{r}
+#Produce Two More Forecasts
+
+# 1. A sub-meter 3 plot you built in the walkthrough above
+plot(forecastfitSM3c, ylim = c(0, 20), ylab= "Watt-Hours", xlab="Time")
+
+decompose_sub_meter3 <- decompose(newDF$Sub_metering_3)
+
+
+# 2. Sub-meter 1 with your choice of frequency, time period and confidence levels
+
+house_weekly_wed <- filter(newDF, Weekday == 3 & Hour == 20 & Minute == 1)
+tsSM1 <- ts(house_weekly_wed$Sub_metering_1, frequency=52, start=c(2008,1))
+fitSM1 <- tslm(tsSM1 ~ trend + season) 
+summary(fitSM1)
+forecastfitSM1c <- forecast(fitSM1, h=10, level=c(80,90))
+plot(forecastfitSM1c, ylim = c(-20, 60), ylab= "Watt-Hours", xlab="Time")
+
+# 3. Sub-meter 2 with your choice of frequency, time period and confidence levels
+house_weekly_wed <- filter(newDF, Weekday == 3 & Hour == 20 & Minute == 1)
+tsSM2 <- ts(house_weekly_wed$Sub_metering_2, frequency=52, start=c(2008,1))
+fitSM2 <- tslm(tsSM2 ~ trend + season) 
+summary(fitSM2)
+forecastfitSM2c <- forecast(fitSM2, h=10, level=c(80,90))
+plot(forecastfitSM2c, ylim = c(-30, 80), ylab= "Watt-Hours", xlab="Time")
+
+
+##https://a-little-book-of-r-for-time-series.readthedocs.io/en/latest/src/timeseries.html
+
+# 4. One comparison chart showing the R2 and RMSE of each model you built
+rainseriesforecasts$forecastfitSM1c
+
+
+ dm.test(residuals(forecastfitSM1c),residuals(forecastfitSM2c),h=1)
+# autoplot(forecastfitSM1c)
+# accuracy( forecastfitSM1c, d='RMSE')
+# accuracy(forecastfitSM1c,EuStockMarkets[201:300,1])
+# 
+# 
+# accuracy (fitSM2 )
+plot( TS)
+
+
+
+```
+
+
+
+```{r}
+dbDisconnect(con)
+```
+
